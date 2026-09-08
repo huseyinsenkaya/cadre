@@ -155,15 +155,11 @@ final class SelectionOverlayController {
         self.completion = completion
         self.previousApp = NSWorkspace.shared.frontmostApplication
 
-        // Etkinleşme eşzamansızdır ve menü çubuğu uygulamasında en pahalı adımdır.
-        // İsteği en başta vermek, pencere kurulumunun onunla aynı anda yürümesini sağlar.
-        NSApp.activate(ignoringOtherApps: true)
-
         do {
             // Dondurma kapalıyken katman açılmadan önce hiçbir yakalama yapılmaz.
             // Görüntü ancak kullanıcı fareyi bıraktığında, yalnız seçilen alan için alınır.
-            // Her ekranı tam çözünürlükte önden yakalamak gözle görülür bir gecikme yapıyordu.
             guard Settings.shared.freezeScreen else {
+                NSApp.activate(ignoringOtherApps: true)
                 // Kullanıcı seçim yaparken ekran listesi arkadan hazırlanır.
                 CaptureEngine.warmDisplays()
                 if mode == .window {
@@ -177,19 +173,28 @@ final class SelectionOverlayController {
             }
 
             let displays = try await CaptureEngine.displays()
-            if mode == .window {
-                windowTargets = (try? await CaptureEngine.windowTargets()) ?? []
-            }
-            // İmlecin bulunduğu ekran önce yakalanır ve hemen gösterilir.
-            // Bütün ekranları beklemek, çok ekranlı kurulumda açılışı geciktiriyordu.
             let mouse = NSEvent.mouseLocation
             let focused = CoordinateSpace.screen(containing: mouse).map(CoordinateSpace.displayID(of:))
             let ordered = displays.sorted { first, _ in first.displayID == focused }
 
+            // Bütün ekranlar uygulama etkinleşmeden önce dondurulur. Etkinleşme önceki
+            // uygulamanın odağını alır ve açık menüsünü, açılır listesini kapatır;
+            // o durum ancak bu sırayla görüntüye girer.
+            let freezeStarted = CFAbsoluteTimeGetCurrent()
+            var frozen: [(screen: NSScreen, image: CGImage)] = []
             for display in ordered {
                 guard let screen = CoordinateSpace.screen(for: display.displayID) else { continue }
-                let image = try await CaptureEngine.capture(display: display)
-                makeOverlay(on: screen, image: image)
+                frozen.append((screen, try await CaptureEngine.capture(display: display)))
+            }
+            let freezeMillis = Int((CFAbsoluteTimeGetCurrent() - freezeStarted) * 1000)
+            Diagnostics.log("ekran donduruldu: \(frozen.count) ekran, \(freezeMillis) ms")
+
+            NSApp.activate(ignoringOtherApps: true)
+            if mode == .window {
+                windowTargets = (try? await CaptureEngine.windowTargets()) ?? []
+            }
+            for item in frozen {
+                makeOverlay(on: item.screen, image: item.image)
             }
         } catch {
             teardown()

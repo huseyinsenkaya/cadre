@@ -43,7 +43,7 @@ final class Settings {
             "afterCapture": AfterCapture.overlay.rawValue,
             "copyToClipboard": true,
             "saveToDisk": true,
-            "playSound": true,
+            "playSound": false,
             "showCursor": false,
             "hideDesktopIcons": false,
             "timerSeconds": 0,
@@ -61,7 +61,7 @@ final class Settings {
             "showsDockIcon": true,
             "confirmBeforeCapture": false,
             "keepHistory": true,
-            "freezeScreen": false,
+            "freezeScreen": true,
             "combineSpacing": 12,
         ])
     }
